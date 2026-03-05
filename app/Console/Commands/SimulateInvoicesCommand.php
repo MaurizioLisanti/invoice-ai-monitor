@@ -24,9 +24,9 @@ class SimulateInvoicesCommand extends Command
 
     protected $description = 'Simula il flusso SDI: inserisce fatture e processa pending ogni 30s (CTRL+C per fermare)';
 
-    private const int LOOP_SECONDS = 30;
+    private const  LOOP_SECONDS = 30;
 
-    private const float ACCEPTED_RATE = 0.70;
+    private const  ACCEPTED_RATE = 0.70;
 
     /** Codici errore reali SDI / FatturaPA */
     private const array SDI_ERRORS = [

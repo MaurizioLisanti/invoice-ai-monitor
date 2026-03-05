@@ -2,7 +2,7 @@
 # Produce: artisan, public/, bootstrap/, config/, app/Http/Controllers/Controller.php,
 #          tests/TestCase.php, phpunit.xml, storage/, .gitignore, ecc.
 # [A-SC1] Richiede accesso internet durante il build (composer create-project)
-FROM php:8.2-cli-alpine AS laravel-scaffold
+FROM php:8.4-cli-alpine AS laravel-scaffold
 
 RUN apk add --no-cache git zip unzip
 COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer

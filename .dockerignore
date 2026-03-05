@@ -1,0 +1,25 @@
+# Esclude vendor dal build context Docker.
+# vendor/ viene installato dal Dockerfile via composer install (Stage 2).
+# Se presente sul host (es. dopo _laravel_scaffold), non deve sovrascrivere
+# il vendor corretto installato nell'immagine. [A-SC1]
+vendor/
+node_modules/
+
+# Esclude .env dal contesto — non deve finire nell'immagine (sicurezza)
+.env
+
+# Artefatti di runtime / cache
+storage/logs/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+.phpunit.result.cache
+.phpunit.cache/
+
+# Git
+.git/
+.gitignore
+
+# Coord / documentazione — non necessari nell'immagine
+coord/
+*.md

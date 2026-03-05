@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(\"/c/Users/Utente/.config/herd/bin/php84/php.exe\":*)",
+      "Bash(vendor/bin/pint:*)",
+      "Bash(\"/c/Users/Utente/.config/herd/bin/php84/php.exe\" artisan:*)",
+      "Bash(echo exit:$?:*)",
+      "Bash(curl:*)"
+    ]
+  }
+}

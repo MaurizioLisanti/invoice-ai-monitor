@@ -20,8 +20,9 @@ COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /app
 
-# Copia prima solo i file Composer per sfruttare il layer cache
-COPY composer.json composer.lock* ./
+# Copia prima solo il manifest Composer per sfruttare il layer cache
+# (composer.lock escluso: viene rigenerato nel build per evitare conflitti di piattaforma)
+COPY composer.json ./
 
 # Installa solo dipendenze di produzione (no --dev)
 RUN composer install \
@@ -29,7 +30,8 @@ RUN composer install \
     --no-scripts \
     --no-autoloader \
     --prefer-dist \
-    --no-interaction
+    --no-interaction \
+    --ignore-platform-reqs
 
 # Copia l'intero sorgente dell'applicazione
 COPY . .

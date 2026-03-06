@@ -1,0 +1,21 @@
+# ─── railway.toml ────────────────────────────────────────────────────────────
+# Istruisce Railway a usare Dockerfile.railway invece del Dockerfile standard.
+# Documentazione: https://docs.railway.com/reference/config-as-code
+# ─────────────────────────────────────────────────────────────────────────────
+
+[build]
+# Usa il Dockerfile dedicato a Railway (il Dockerfile originale è per VPS)
+dockerfilePath = "Dockerfile.railway"
+
+[deploy]
+# Railway sostituisce la CMD del container con startCommand se specificato;
+# qui lo lasciamo gestire al CMD del Dockerfile (/start.sh).
+# startCommand = "/start.sh"  # già definito come CMD nell'immagine
+
+# Healthcheck: Railway sonda "/" per verificare che il container sia pronto
+healthcheckPath = "/"
+healthcheckTimeout = 300          # secondi — include tempo migrazioni
+
+# Riavvio automatico in caso di crash (max 3 tentativi)
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3

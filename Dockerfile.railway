@@ -1,0 +1,188 @@
+# ─── Dockerfile.railway ──────────────────────────────────────────────────────
+# Ottimizzato per Railway.app — NON usare per VPS/Docker Compose locale
+# (per quello usare Dockerfile + docker-compose.yml)
+#
+# Architettura: multi-stage build
+#   Stage 1 (builder) — installa dipendenze Composer senza dev
+#   Stage 2 (runtime) — nginx + php-fpm + Laravel ottimizzato
+#
+# Variabili richieste su Railway:
+#   APP_KEY, DB_HOST, DB_PORT, DB_DATABASE, DB_USERNAME, DB_PASSWORD
+#   PORT viene iniettata automaticamente da Railway
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ─── Stage 1: Builder ────────────────────────────────────────────────────────
+FROM php:8.4-cli-alpine AS builder
+
+RUN apk add --no-cache git zip unzip
+
+COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
+
+WORKDIR /app
+
+# Copia prima solo i file Composer per sfruttare il layer cache
+COPY composer.json composer.lock* ./
+
+# Installa solo dipendenze di produzione (no --dev)
+RUN composer install \
+    --no-dev \
+    --no-scripts \
+    --no-autoloader \
+    --prefer-dist \
+    --no-interaction
+
+# Copia l'intero sorgente dell'applicazione
+COPY . .
+
+# Genera autoloader ottimizzato (classmap completo)
+RUN composer dump-autoload --optimize --no-dev --classmap-authoritative
+
+# ─── Stage 2: Runtime ────────────────────────────────────────────────────────
+FROM php:8.4-fpm-alpine AS runtime
+
+# Dipendenze di sistema + nginx + estensioni PHP necessarie per Laravel 11
+RUN apk add --no-cache \
+        nginx \
+        curl \
+        bash \
+        libpng-dev \
+        libxml2-dev \
+        oniguruma-dev \
+        zip \
+        unzip \
+    && docker-php-ext-install \
+        pdo \
+        pdo_mysql \
+        opcache \
+        mbstring \
+        xml \
+        ctype \
+        tokenizer
+
+# OPcache ottimizzato per produzione
+RUN { \
+    echo 'opcache.enable=1'; \
+    echo 'opcache.memory_consumption=256'; \
+    echo 'opcache.interned_strings_buffer=16'; \
+    echo 'opcache.max_accelerated_files=20000'; \
+    echo 'opcache.revalidate_freq=0'; \
+    echo 'opcache.validate_timestamps=0'; \
+    echo 'opcache.save_comments=1'; \
+} > /usr/local/etc/php/conf.d/opcache-prod.ini
+
+WORKDIR /app
+
+# Copia artefatti dallo stage builder
+COPY --from=builder /app .
+
+# ─── nginx — configurazione template con placeholder ${PORT} ─────────────────
+# envsubst sostituirà ${PORT} a runtime con il valore Railway
+RUN mkdir -p /run/nginx
+
+COPY <<'NGINX_CONF' /etc/nginx/nginx.conf.template
+worker_processes auto;
+error_log /dev/stderr warn;
+pid /tmp/nginx.pid;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+    sendfile      on;
+    keepalive_timeout 65;
+
+    # Log su stdout/stderr (Railway raccoglie i log dei container)
+    access_log /dev/stdout;
+    error_log  /dev/stderr warn;
+
+    server {
+        listen ${PORT} default_server;
+        server_name _;
+        root /app/public;
+        index index.php;
+
+        # Compressione gzip
+        gzip on;
+        gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
+
+        # Asset statici — cache lunga, nessun PHP
+        location ~* \.(css|js|png|jpg|jpeg|gif|ico|svg|woff2?|ttf|eot)$ {
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+            try_files $uri =404;
+        }
+
+        # Laravel front-controller
+        location / {
+            try_files $uri $uri/ /index.php?$query_string;
+        }
+
+        # PHP-FPM
+        location ~ \.php$ {
+            fastcgi_pass  127.0.0.1:9000;
+            fastcgi_index index.php;
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+            include       fastcgi_params;
+            fastcgi_read_timeout 60;
+        }
+
+        # Blocca accesso a file sensibili
+        location ~ /\.(env|git|htaccess) {
+            deny all;
+        }
+    }
+}
+NGINX_CONF
+
+# ─── Script di avvio ─────────────────────────────────────────────────────────
+COPY <<'START_SH' /start.sh
+#!/usr/bin/env bash
+set -e
+
+# Railway inietta PORT; default 8080 se assente (sviluppo locale)
+export PORT="${PORT:-8080}"
+
+echo "[railway] Avvio su porta $PORT"
+
+# Genera nginx.conf sostituendo ${PORT}
+envsubst '${PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
+
+# Permessi storage
+chown -R www-data:www-data /app/storage /app/bootstrap/cache
+chmod -R 775 /app/storage /app/bootstrap/cache
+
+# Genera APP_KEY se non presente (primo deploy)
+if [ -z "$APP_KEY" ]; then
+    echo "[railway] APP_KEY non impostata — generazione in corso..."
+    php artisan key:generate --force
+fi
+
+# Ottimizzazioni Laravel per produzione
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+php artisan event:cache
+
+# Migrazioni automatiche (sicuro grazie a Laravel idempotency)
+php artisan migrate --force --no-interaction
+
+echo "[railway] Bootstrap completato. Avvio php-fpm e nginx..."
+
+# Avvia php-fpm in background, nginx in foreground
+php-fpm --daemonize
+nginx -g "daemon off;"
+START_SH
+
+RUN chmod +x /start.sh
+
+# Permessi iniziali storage (verranno riapplicati da start.sh a runtime)
+RUN chown -R www-data:www-data storage bootstrap/cache \
+    && chmod -R 775 storage bootstrap/cache
+
+# Railway usa la variabile PORT dinamicamente — EXPOSE è solo documentazione
+EXPOSE 8080
+
+CMD ["/start.sh"]

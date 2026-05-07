@@ -1,3 +1,7 @@
+> ⚠️ **Questo è il prototipo originale** — costruito per Codemotion 2026 con Laravel 11.
+> 
+> 👉 Vedi **[sdi-ops-monitor](https://github.com/MaurizioLisanti/sdi-ops-monitor)** per la versione avanzata con CakePHP 5, AWS Elastic Beanstalk, SQS, CloudWatch e deploy reale.
+> 
 # 🟢 Invoice AI Monitor
 ### AI-powered monitoring platform with agentic pipeline
 ![Tests](https://img.shields.io/badge/Tests-49%20PASS-brightgreen)
